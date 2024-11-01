@@ -1,0 +1,10 @@
+pydantic
+pydantic-settings
+fastapi
+uvicorn
+together
+python-dotenv
+torch==2.5.1
+diffusers
+transformers
+accelerate
