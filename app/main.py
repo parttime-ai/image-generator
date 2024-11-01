@@ -6,7 +6,8 @@ from fastapi.responses import HTMLResponse
 from app.config import AppConfiguration
 from app.endpoints import router
 from app.huggingface.huggingface import StableDiffusion
-from app.nsfw_detection.text_classifier import DistilRobertaNsfwClassifier, RobertaNsfwClassifier
+from app.nsfw_detection.text_classifier import DistilRobertaNsfwClassifier, RobertaNsfwClassifier, \
+    MixtureOfAgentsClassifier
 from app.together_ai.together_ai import TogetherAI
 
 import logging
@@ -34,6 +35,9 @@ async def lifespan(app: FastAPI):
 
     logger.info("Loading RoBERTa NSFW text detection model")
     app.state.roberta_clf = RobertaNsfwClassifier()
+
+    logger.info("Loading MoA NSFW text detection")
+    app.state.moa_clf = MixtureOfAgentsClassifier(api_key=app.state.app_configuration.together_api_key)
 
     yield
     # shutdown
@@ -110,6 +114,20 @@ async def hello_world(response_class=HTMLResponse):
                         console.log(data);
                         document.getElementById('roberta_clf_result').innerHTML = JSON.stringify(data);
                     }
+                    
+                    async function callMoaClf() {
+                        const prompt = document.getElementById('moa_clf_text').value;
+                        const response = await fetch('/nsfw-text-detection/moa-clf', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ prompt: prompt })
+                        });
+                        const data = await response.json();
+                        console.log(data);
+                        document.getElementById('moa_clf_result').innerHTML = JSON.stringify(data);
+                    }
                 </script>
             </head>
             <body>
@@ -137,6 +155,12 @@ async def hello_world(response_class=HTMLResponse):
                     <button onclick="callRobertaClf()">Call RobertaClf</button>
                     <br>
                     <p id="roberta_clf_result"></p>
+                </div>
+                <div>
+                    <input type="text" id="moa_clf_text" placeholder="MoaClf">
+                    <button onclick="callMoaClf()">Call MoaClf</button>
+                    <br>
+                    <p id="moa_clf_result"></p>
                 </div>
             </body>
         </html>

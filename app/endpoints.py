@@ -6,9 +6,11 @@ from fastapi import APIRouter, HTTPException, Request
 from app.config import AppConfiguration
 
 from app.models.requests import ImageRequest, TextPrompt
+from app.models.response import ContentAssessment
 
 router = APIRouter()
 appSettings = AppConfiguration()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/generate-image/together")
@@ -61,3 +63,17 @@ async def nsfw_text_detection_roberta(request: Request, text_prompt: TextPrompt)
     prediction = await model.classify(text_prompt.prompt)
 
     return prediction
+
+
+@router.post("/nsfw-text-detection/moa-clf")
+async def nsfw_text_detection_moa(request: Request, text_prompt: TextPrompt) -> ContentAssessment:
+    model = request.app.state.moa_clf
+    try:
+        logger.info(f"Classifying text: {text_prompt.prompt}")
+        prediction = await model.classify(text_prompt.prompt)
+        assesment = ContentAssessment(**prediction)
+
+        return assesment
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=500, detail="Could not classify text")

@@ -9,5 +9,6 @@ class ImageRequest(BaseModel):
     guidance_scale: int | None = 7
     seed: int | None = 42
 
+
 class TextPrompt(BaseModel):
     prompt: str
