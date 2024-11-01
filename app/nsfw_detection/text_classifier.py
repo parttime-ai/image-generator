@@ -38,3 +38,4 @@ class RobertaNsfwClassifier(ITextNsfwClassifier):
         predicted_class = torch.argmax(logits, dim=1).item()
         predicted_class = {"label": str(predicted_class), "score": float(logits.softmax(dim=1).max())}
         return predicted_class  # {"label": '0' | '1' | '2', "score": float}
+    
