@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from app.config import AppConfiguration
 
 from app.models.requests import ImageRequest, TextPrompt
-from app.models.response import ContentAssessment
+from app.models.response import ContentAssessment, OverallAssessment, ConfidenceLevel
 
 router = APIRouter()
 appSettings = AppConfiguration()
@@ -16,19 +16,34 @@ logger = logging.getLogger(__name__)
 @router.post("/generate-image/together")
 async def generate_image_together(request: Request, image_request: ImageRequest) -> str:
     model = request.app.state.together_ai
-    image = await model.generate(
-        prompt=image_request.prompt,
-        width=image_request.width,
-        height=image_request.height,
-        num_inference_steps=image_request.num_inference_steps,
-        guidance_scale=image_request.guidance_scale,
-        seed=image_request.seed
-    )
 
-    if image is None:
-        raise HTTPException(status_code=500, detail="Could not generate image")
+    text_content_assessor = request.app.state.moa_clf
+    try:
+        if image_request.nsfw_check:
+            logger.info(f"Classifying text: {image_request.prompt}")
+            prediction = await text_content_assessor.classify(image_request.prompt)
+            assessment = ContentAssessment(**prediction)
+            if (assessment.overall_assessment == OverallAssessment.inappropriate and
+                    (assessment.confidence_level == ConfidenceLevel.medium or
+                     assessment.confidence_level == ConfidenceLevel.high)):
+                raise HTTPException(status_code=400, detail=f"NSFW content detected. Reason: {assessment.reason}")
 
-    return image
+        image = await model.generate(
+            prompt=image_request.prompt,
+            width=image_request.width,
+            height=image_request.height,
+            num_inference_steps=image_request.num_inference_steps,
+            guidance_scale=image_request.guidance_scale,
+            seed=image_request.seed
+        )
+
+        if image is None:
+            raise HTTPException(status_code=500, detail="Could not generate image")
+
+        return image
+    except Exception as e:
+        logging.error(f"Error: {e}")
+        raise HTTPException(status_code=500, detail="Could not classify text")
 
 
 @router.post("/generate-image/local-sd")
@@ -71,9 +86,9 @@ async def nsfw_text_detection_moa(request: Request, text_prompt: TextPrompt) -> 
     try:
         logger.info(f"Classifying text: {text_prompt.prompt}")
         prediction = await model.classify(text_prompt.prompt)
-        assesment = ContentAssessment(**prediction)
+        assessment = ContentAssessment(**prediction)
 
-        return assesment
+        return assessment
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=500, detail="Could not classify text")
