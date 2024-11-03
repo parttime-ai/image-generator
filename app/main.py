@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse
 from app.config import AppConfiguration
 from app.endpoints import router
 from app.huggingface.huggingface import StableDiffusion
+from app.nsfw_detection.image_classifier import FtVitNsfwClassifier
 from app.nsfw_detection.text_classifier import DistilRobertaNsfwClassifier, RobertaNsfwClassifier, \
     MixtureOfAgentsClassifier
 from app.together_ai.together_ai import TogetherAI
@@ -38,6 +39,9 @@ async def lifespan(app: FastAPI):
 
     logger.info("Loading MoA NSFW text detection")
     app.state.moa_clf = MixtureOfAgentsClassifier(api_key=app.state.app_configuration.together_api_key)
+
+    logger.info("Loading ViT NSFW image detection model")
+    app.state.vit_clf = FtVitNsfwClassifier()
 
     yield
     # shutdown

@@ -1,8 +1,13 @@
+import base64
 import logging
+from io import BytesIO
 from typing import Any
 
+import PIL.Image
+from PIL.Image import Image
 from fastapi import APIRouter, HTTPException, Request
 
+from app.api import IImageNsfwClassifier, NsfwPrediction, Nsfw
 from app.config import AppConfiguration
 
 from app.models.requests import ImageRequest, TextPrompt
@@ -19,7 +24,7 @@ async def generate_image_together(request: Request, image_request: ImageRequest)
 
     text_content_assessor = request.app.state.moa_clf
     try:
-        if image_request.nsfw_check:
+        if image_request.nsfw_prompt_check:
             logger.info(f"Classifying text: {image_request.prompt}")
             prediction = await text_content_assessor.classify(image_request.prompt)
             assessment = ContentAssessment(**prediction)
@@ -39,6 +44,15 @@ async def generate_image_together(request: Request, image_request: ImageRequest)
 
         if image is None:
             raise HTTPException(status_code=500, detail="Could not generate image")
+
+        if image_request.nsfw_image_check:
+            image_nsfw_checker: IImageNsfwClassifier = request.app.state.vit_clf
+            logger.info("Classifying image")
+            # generate image from base64
+            img = decode_b64_to_image(image)
+            image_pred: NsfwPrediction = await image_nsfw_checker.classify(img)
+            if image_pred.label == Nsfw.nsfw:
+                raise HTTPException(status_code=400, detail=f"NSFW content detected")
 
         return image
     except Exception as e:
@@ -92,3 +106,9 @@ async def nsfw_text_detection_moa(request: Request, text_prompt: TextPrompt) -> 
     except Exception as e:
         logging.error(f"Error: {e}")
         raise HTTPException(status_code=500, detail="Could not classify text")
+
+
+def decode_b64_to_image(b64_image: str) -> Image:
+    data = base64.b64decode(b64_image)
+    img = PIL.Image.open(BytesIO(data))
+    return img

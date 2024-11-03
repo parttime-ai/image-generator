@@ -8,7 +8,8 @@ class ImageRequest(BaseModel):
     num_inference_steps: int = 6
     guidance_scale: int | None = 7
     seed: int | None = 42
-    nsfw_check: bool = True
+    nsfw_prompt_check: bool = True
+    nsfw_image_check: bool = True
 
 
 class TextPrompt(BaseModel):
