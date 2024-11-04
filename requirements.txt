@@ -8,3 +8,4 @@ torch==2.5.1
 diffusers
 transformers
 accelerate
+azure-ai-contentsafety

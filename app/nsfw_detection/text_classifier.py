@@ -4,10 +4,14 @@ import logging
 from typing import Any
 
 import torch
+from azure.ai.contentsafety import ContentSafetyClient
+from azure.ai.contentsafety.models import AnalyzeTextOptions, ImageCategory
+from azure.core.credentials import AzureKeyCredential
+from azure.core.exceptions import HttpResponseError
 from together import AsyncTogether
 from transformers import pipeline, Pipeline, AutoTokenizer, AutoModelForSequenceClassification
 
-from app.api import ITextNsfwClassifier
+from app.api import ITextNsfwClassifier, NsfwPrediction, Nsfw
 from app.nsfw_detection.prompt_templates import CONTENT_CHECK_PROMPT, AGGREGATOR_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -123,3 +127,41 @@ class MixtureOfAgentsClassifier(ITextNsfwClassifier):
             return response_dict
         except json.JSONDecodeError:
             logger.info("Could not parse response: %s. Retry...", response)
+
+
+class AzureTextNsfwContentClassifier(ITextNsfwClassifier):
+    classifier: ContentSafetyClient
+    categories_to_check: list[ImageCategory] = [
+        ImageCategory.HATE,
+        ImageCategory.SELF_HARM,
+        ImageCategory.SEXUAL,
+        ImageCategory.VIOLENCE
+    ]
+
+    def __init__(self, endpoint: str, key: str):
+        self.endpoint = endpoint
+        self.key = key
+        self.classifier = ContentSafetyClient(endpoint=self.endpoint, credential=AzureKeyCredential(self.key))
+
+    async def classify(self, text: str) -> Any:
+        request = AnalyzeTextOptions(text=text)
+        try:
+            logger.info("Classifying text")
+            result = self.classifier.analyze_text(request)
+            logger.info(result)
+        except HttpResponseError as e:
+            logger.error("Analyze text failed.")
+            if e.error:
+                logger.error(f"Error code: {e.error.code}")
+                logger.error(f"Error message: {e.error.message}")
+                raise
+            logger.error(e)
+            raise
+
+        results = [next(item for item in result.categories_analysis if item.category == category)
+                   for category in self.categories_to_check]
+
+        if any(result.severity > 2 for result in results):
+            return NsfwPrediction(label=Nsfw.nsfw, score=1.0)
+        else:
+            return NsfwPrediction(label=Nsfw.normal, score=1.0)

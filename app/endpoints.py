@@ -7,11 +7,13 @@ import PIL.Image
 from PIL.Image import Image
 from fastapi import APIRouter, HTTPException, Request
 
-from app.api import IImageNsfwClassifier, NsfwPrediction, Nsfw
+from app.api import IImageNsfwClassifier, NsfwPrediction, Nsfw, ITextNsfwClassifier
 from app.config import AppConfiguration
 
 from app.models.requests import ImageRequest, TextPrompt
 from app.models.response import ContentAssessment, OverallAssessment, ConfidenceLevel
+from app.nsfw_detection.text_classifier import MixtureOfAgentsClassifier
+from app.together_ai.together_ai import TogetherAI
 
 router = APIRouter()
 appSettings = AppConfiguration()
@@ -20,18 +22,32 @@ logger = logging.getLogger(__name__)
 
 @router.post("/generate-image/together")
 async def generate_image_together(request: Request, image_request: ImageRequest) -> str:
-    model = request.app.state.together_ai
+    model: TogetherAI = request.app.state.together_ai
 
-    text_content_assessor = request.app.state.moa_clf
+    azure_txt_clf: ITextNsfwClassifier = request.app.state.azure_text_clf
+    moa_txt_clf: MixtureOfAgentsClassifier = request.app.state.moa_clf
     try:
         if image_request.nsfw_prompt_check:
-            logger.info(f"Classifying text: {image_request.prompt}")
-            prediction = await text_content_assessor.classify(image_request.prompt)
-            assessment = ContentAssessment(**prediction)
-            if (assessment.overall_assessment == OverallAssessment.inappropriate and
-                    (assessment.confidence_level == ConfidenceLevel.medium or
-                     assessment.confidence_level == ConfidenceLevel.high)):
+            logger.info(f"Classifying text with Azure: {image_request.prompt}")
+            azure_prediction = await azure_txt_clf.classify(image_request.prompt)
+            logger.info(f"Prediction: {azure_prediction}")
+
+            if azure_prediction.label == Nsfw.nsfw:
+                raise HTTPException(status_code=400, detail="NSFW content detected")
+
+            logger.info("Passed Azure NSFW check")
+
+            logger.info(f"Classifying text with MoA: {image_request.prompt}")
+            moa_prediction = await moa_txt_clf.classify(image_request.prompt)
+            logger.info(f"Prediction: {moa_prediction}")
+            assessment = ContentAssessment(**moa_prediction)
+            moa_assessment = (assessment.overall_assessment == OverallAssessment.inappropriate and
+                              (assessment.confidence_level == ConfidenceLevel.medium or
+                               assessment.confidence_level == ConfidenceLevel.high))
+
+            if moa_assessment:
                 raise HTTPException(status_code=400, detail=f"NSFW content detected. Reason: {assessment.reason}")
+            logger.info("Passed MoA NSFW check")
 
         image = await model.generate(
             prompt=image_request.prompt,
@@ -46,11 +62,10 @@ async def generate_image_together(request: Request, image_request: ImageRequest)
             raise HTTPException(status_code=500, detail="Could not generate image")
 
         if image_request.nsfw_image_check:
-            image_nsfw_checker: IImageNsfwClassifier = request.app.state.vit_clf
+            image_nsfw_clf: IImageNsfwClassifier = request.app.state.azure_image_clf
             logger.info("Classifying image")
-            # generate image from base64
-            img = decode_b64_to_image(image)
-            image_pred: NsfwPrediction = await image_nsfw_checker.classify(img)
+            b64 = base64.b64decode(image)
+            image_pred: NsfwPrediction = await image_nsfw_clf.classify(b64)
             if image_pred.label == Nsfw.nsfw:
                 raise HTTPException(status_code=400, detail=f"NSFW content detected")
 

@@ -9,3 +9,5 @@ class AppConfiguration(BaseSettings):
     sd_model: str = Field(alias="SD_MODEL")
     is_local: bool = False
     model_config = SettingsConfigDict(env_file="config/.env")
+    azure_endpoint: str = Field(alias="AZURE_ENDPOINT")
+    azure_key: str = Field(alias="AZURE_KEY")

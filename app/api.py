@@ -2,7 +2,6 @@ import abc
 from enum import Enum
 from typing import Any
 
-from PIL.Image import Image
 from pydantic import BaseModel
 
 
@@ -24,11 +23,11 @@ class IImageGenerator(abc.ABC):
 
 class ITextNsfwClassifier(abc.ABC):
     @abc.abstractmethod
-    async def classify(self, text: str) -> Any:
+    async def classify(self, text: str) -> NsfwPrediction:
         pass
 
 
 class IImageNsfwClassifier(abc.ABC):
     @abc.abstractmethod
-    async def classify(self, image: Image) -> NsfwPrediction:
+    async def classify(self, b64: bytes) -> NsfwPrediction:
         pass

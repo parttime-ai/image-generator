@@ -6,9 +6,9 @@ from fastapi.responses import HTMLResponse
 from app.config import AppConfiguration
 from app.endpoints import router
 from app.huggingface.huggingface import StableDiffusion
-from app.nsfw_detection.image_classifier import FtVitNsfwClassifier
+from app.nsfw_detection.image_classifier import FtVitNsfwClassifier, AzureImageNsfwContentClassifier
 from app.nsfw_detection.text_classifier import DistilRobertaNsfwClassifier, RobertaNsfwClassifier, \
-    MixtureOfAgentsClassifier
+    MixtureOfAgentsClassifier, AzureTextNsfwContentClassifier
 from app.together_ai.together_ai import TogetherAI
 
 import logging
@@ -43,6 +43,18 @@ async def lifespan(app: FastAPI):
     logger.info("Loading ViT NSFW image detection model")
     app.state.vit_clf = FtVitNsfwClassifier()
 
+    logger.info("Azure Image Content Safety Classifier")
+    app.state.azure_image_clf = AzureImageNsfwContentClassifier(
+        endpoint=app.state.app_configuration.azure_endpoint,
+        key=app.state.app_configuration.azure_key
+    )
+
+    logger.info("Azure Text Content Safety Classifier")
+    app.state.azure_text_clf = AzureTextNsfwContentClassifier(
+        endpoint=app.state.app_configuration.azure_endpoint,
+        key=app.state.app_configuration.azure_key
+    )
+
     yield
     # shutdown
     logger.info("Shutting down the Image Generation API")
@@ -74,49 +86,15 @@ async def hello_world(response_class=HTMLResponse):
                             },
                             body: JSON.stringify({ prompt: prompt })
                         });
+                        
+                        const errorElement = document.getElementById('together_ai_error');
+                        if (!response.ok) {
+                            errorElement.textContent = 'Error: ' + response.statusText;
+                            return;
+                        }
                         const data = await response.json();
                         document.getElementById('together_ai_image').src = 'data:image/png;base64,' + data;
-                    }
-
-                    async function callLocalSD() {
-                        const prompt = document.getElementById('local_sd_prompt').value;
-                        const response = await fetch('/generate-image/local-sd', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ prompt: prompt })
-                        });
-                        const data = await response.json();
-                        document.getElementById('local_sd_image').src = 'data:image/png;base64,' + data;
-                    }
-                    
-                    async function callDistilClf() {
-                        const prompt = document.getElementById('distil_clf_text').value;
-                        const response = await fetch('/nsfw-text-detection/distil-clf', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ prompt: prompt })
-                        });
-                        const data = await response.json();
-                        console.log(data);
-                        document.getElementById('distil_clf_result').innerHTML = JSON.stringify(data);
-                    }
-                    
-                    async function callRobertaClf() {
-                        const prompt = document.getElementById('roberta_clf_text').value;
-                        const response = await fetch('/nsfw-text-detection/roberta-clf', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ prompt: prompt })
-                        });
-                        const data = await response.json();
-                        console.log(data);
-                        document.getElementById('roberta_clf_result').innerHTML = JSON.stringify(data);
+                        errorElement.textContent = '';
                     }
                     
                     async function callMoaClf() {
@@ -141,24 +119,7 @@ async def hello_world(response_class=HTMLResponse):
                     <button onclick="callTogetherAI()">Call TogetherAI</button>
                     <br>
                     <img id="together_ai_image" src="" alt="TogetherAI Image">
-                </div>
-                <div>
-                    <input type="text" id="local_sd_prompt" placeholder="Local SD Prompt">
-                    <button onclick="callLocalSD()">Call Local SD</button>
-                    <br>
-                    <img id="local_sd_image" src="" alt="Local SD Image">
-                </div>
-                <div>
-                    <input type="text" id="distil_clf_text" placeholder="DistilClf">
-                    <button onclick="callDistilClf()">Call DistilClf</button>
-                    <br>
-                    <p id="distil_clf_result"></p>
-                </div>
-                <div>
-                    <input type="text" id="roberta_clf_text" placeholder="RobertaClf">
-                    <button onclick="callRobertaClf()">Call RobertaClf</button>
-                    <br>
-                    <p id="roberta_clf_result"></p>
+                    <p id="together_ai_error" style="color: red;"></p>
                 </div>
                 <div>
                     <input type="text" id="moa_clf_text" placeholder="MoaClf">
