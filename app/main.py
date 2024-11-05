@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -5,13 +6,9 @@ from fastapi.responses import HTMLResponse
 
 from app.config import AppConfiguration
 from app.endpoints import router
-from app.huggingface.huggingface import StableDiffusion
-from app.nsfw_detection.image_classifier import FtVitNsfwClassifier, AzureImageNsfwContentClassifier
-from app.nsfw_detection.text_classifier import DistilRobertaNsfwClassifier, RobertaNsfwClassifier, \
-    MixtureOfAgentsClassifier, AzureTextNsfwContentClassifier
+from app.nsfw_detection.image_classifier import AzureImageNsfwContentClassifier
+from app.nsfw_detection.text_classifier import MixtureOfAgentsClassifier, AzureTextNsfwContentClassifier
 from app.together_ai.together_ai import TogetherAI
-
-import logging
 
 
 @asynccontextmanager
@@ -26,22 +23,8 @@ async def lifespan(app: FastAPI):
         model=app.state.app_configuration.model,
         api_key=app.state.app_configuration.together_api_key)
 
-    logger.info("Loading the Stable Diffusion model")
-    app.state.stable_diffusion = StableDiffusion(
-        model=app.state.app_configuration.sd_model
-    )
-
-    logger.info("Loading DistilRoBERTa NSFW text detection model")
-    app.state.distil_clf = DistilRobertaNsfwClassifier()
-
-    logger.info("Loading RoBERTa NSFW text detection model")
-    app.state.roberta_clf = RobertaNsfwClassifier()
-
     logger.info("Loading MoA NSFW text detection")
     app.state.moa_clf = MixtureOfAgentsClassifier(api_key=app.state.app_configuration.together_api_key)
-
-    logger.info("Loading ViT NSFW image detection model")
-    app.state.vit_clf = FtVitNsfwClassifier()
 
     logger.info("Azure Image Content Safety Classifier")
     app.state.azure_image_clf = AzureImageNsfwContentClassifier(
