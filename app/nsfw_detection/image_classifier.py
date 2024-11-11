@@ -1,40 +1,15 @@
 import base64
+import logging
 from io import BytesIO
 
 import PIL
-import torch
 from PIL.Image import Image
 from azure.ai.contentsafety import ContentSafetyClient
 from azure.ai.contentsafety.models import AnalyzeImageOptions, ImageData, ImageCategory
 from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import HttpResponseError
-from transformers import AutoModelForImageClassification, ViTImageProcessor
 
 from app.api import NsfwPrediction, IImageNsfwClassifier, Nsfw
-import logging
-
-class FtVitNsfwClassifier(IImageNsfwClassifier):
-    processor: ViTImageProcessor
-    model_name = "Falconsai/nsfw_image_detection"
-
-    def __init__(self):
-        self.model = AutoModelForImageClassification.from_pretrained(self.model_name)
-        self.processor = ViTImageProcessor.from_pretrained(self.model_name)
-
-    async def classify(self, b64: str) -> NsfwPrediction:
-        with torch.no_grad():
-            inputs = self.processor(images=image, return_tensors="pt")
-            outputs = self.model(**inputs)
-            logits = outputs.logits
-
-        predicted_label = logits.argmax(-1).item()
-        label = self.model.config.id2label[predicted_label]
-
-        # get the prediction label and score
-        print({"label": label, "score": logits.softmax(-1).max().item()})
-        return NsfwPrediction(
-            label=label,
-            score=logits.softmax(-1).max().item())
 
 
 def image_to_base64(image: PIL.Image) -> bytes:
