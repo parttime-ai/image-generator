@@ -1,10 +1,13 @@
 # Image Generation API
 
+⚠️ Warning: *This documentation is fully AI-generated.*
+
+
 This project is an Image Generation API built with FastAPI. It includes NSFW content detection using Azure and Mixture of Agents (MoA) classifiers.
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.12+
 - pip
 
 ## Installation
@@ -95,3 +98,12 @@ Logs are written to app.log with the following format:
 - **Response:**
     - `200 OK`: Content assessment result
     - `500 Internal Server Error`: Could not classify text
+
+## Running the Application with Docker
+To start the application using Docker, follow these steps:  
+
+1. Build the Docker Image: Navigate to the directory containing the Dockerfile and run the following command to build the Docker image:  <pre>docker build -t your_image_name . </pre>
+
+2. Run the Docker Container:  Use the following command to run the Docker container, mapping port 8000 of the container to port 8000 on the host:  <pre>docker run -p 8000:8000 your_image_name </pre>
+
+3. Access the Application:  Open your web browser and navigate to http://localhost:8000 to access the application.
